@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Your Eyes — Made of Numbers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#030208}
+body{font-family:Cinzel,Georgia,serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.replay{position:fixed;z-index:5;right:clamp(12px,2.5vw,28px);top:clamp(12px,2.5vw,28px);padding:10px 17px;border:1px solid rgba(204,160,255,.48);border-radius:999px;background:rgba(17,8,30,.72);color:#f4eaff;letter-spacing:.18em;font:600 10px Cinzel,serif;backdrop-filter:blur(12px);cursor:pointer}
+.hint{position:fixed;z-index:4;bottom:max(15px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);white-space:nowrap;color:rgba(220,195,255,.48);font:9px Cinzel,serif;letter-spacing:.25em;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<button class="replay" id="replay">REPLAY ↻</button>
+<div class="hint">POWERED BY ALI-6IX</div>
+<script>
+(()=>{
+"use strict";
+const canvas=document.getElementById("scene");
+const ctx=canvas.getContext("2d",{alpha:false});
+const photo=new Image(); photo.src="eyes.jpg";
+const digits="0123456789";
+let W=0,H=0,D=1;
+let start=performance.now();
+let eyeLayer=null,eyeBox=null,heart=[];
+let eyeParticles=[];
+let raf=0;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t)};
+const rand=(a,b)=>a+Math.random()*(b-a);
+
+function resize(){
+ W=innerWidth; H=innerHeight; D=Math.min(devicePixelRatio||1,1.5);
+ canvas.width=Math.round(W*D); canvas.height=Math.round(H*D);
+ ctx.setTransform(D,0,0,D,0,0);
+ if(photo.complete&&photo.naturalWidth) buildEye();
+}
+function buildEye(){
+    const sw = photo.naturalWidth;
+    const sh = photo.naturalHeight;
+
+    const scale = Math.min(
+        W * .94 / sw,
+        H * .56 / sh
+    );
+
+    const dw = sw * scale;
+    const dh = sh * scale;
+
+    eyeBox = {
+        x: (W - dw) / 2,
+        y: H * .43 - dh / 2,
+        w: dw,
+        h: dh
+    };
+
+    const source = document.createElement("canvas");
+    source.width = sw;
+    source.height = sh;
+
+    const sc = source.getContext("2d", {
+        willReadFrequently: true
+    });
+
+    sc.drawImage(photo, 0, 0);
+
+    const pixels = sc.getImageData(
+        0, 0, sw, sh
+    ).data;
+
+    eyeParticles = [];
+
+    const step = 2;
+    const digits = "0123456789";
+
+    for(let y = 1; y < sh; y += step){
+        for(let x = 1; x < sw; x += step){
+
+            const k = (y * sw + x) * 4;
+
+            const r = pixels[k];
+            const g = pixels[k + 1];
+            const b = pixels[k + 2];
+
+            const brightness =
+                .2126 * r +
+                .7152 * g +
+                .0722 * b;
+
+            const digit = digits[
+                Math.floor(brightness / 255 * 9.99)
+            ];
+
+          const contrast = 1.18;
+
+const red = Math.max(0, Math.min(255,
+    (r - 128) * contrast + 128
+));
+
+const green = Math.max(0, Math.min(255,
+    (g - 128) * contrast + 128
+));
+
+const blue = Math.max(0, Math.min(255,
+    (b - 128) * contrast + 128
+));
+
+const color = `rgb(
+    ${Math.round(red)},
+    ${Math.round(green)},
+    ${Math.round(blue)}
+)`;
+
+            eyeParticles.push({
+                x: eyeBox.x + x * scale,
+                y: eyeBox.y + y * scale,
+                digit,
+                color,
+               alpha: .96,
+delay: Math.random(),
+size: Math.max(3, step * scale * 1.12)
+            });
+        }
+    }
+
+    buildHeart();
+}
+
+function buildHeart(){
+ heart=[];
+ const count=1250;
+ for(let i=0;i<count;i++){
+  const a=rand(0,Math.PI*2), f=Math.sqrt(Math.random());
+  const x=16*Math.pow(Math.sin(a),3)*f;
+  const y=(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))*f;
+  heart.push({x:x/18,y:-y/18,z:rand(-1,1)*Math.sqrt(1-f*f),digit:digits[(Math.random()*10)|0],phase:rand(0,6.28)});
+ }
+}
+function background(t){
+ ctx.fillStyle="#030208";ctx.fillRect(0,0,W,H);
+ const glow=ctx.createRadialGradient(W/2,H*.43,0,W/2,H*.43,Math.max(W,H)*.7);
+ glow.addColorStop(0,"rgba(70,31,110,.24)");glow.addColorStop(.55,"rgba(25,9,45,.10)");glow.addColorStop(1,"rgba(0,0,0,0)");
+ ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+ for(let i=0;i<65;i++){
+  const x=(i*137.31+Math.sin(t*.00025+i)*19+W)%W;
+  const y=(i*83.17+Math.cos(t*.00019+i*1.7)*15+H)%H;
+  ctx.fillStyle=`rgba(203,166,255,${.12+.13*(.5+.5*Math.sin(t*.001+i))})`;
+  ctx.fillRect(x,y,1,1);
+ }
+}
+
+function drawEye(t) {
+
+    if (!eyeParticles.length || !eyeBox) return;
+
+    const startTime = 1.1;
+    const duration = 12.8;
+
+    const progress = Math.max(
+        0,
+        Math.min(1, (t - startTime) / duration)
+    );
+
+    const fade = 1 - Math.max(
+        0,
+        Math.min(1, (t - 17.2) / 1.7)
+    );
+
+    if (progress <= 0 || fade <= 0) return;
+
+    ctx.save();
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    for (const p of eyeParticles) {
+
+        if (progress < p.delay) continue;
+
+        const particleProgress = Math.min(
+            1,
+            (progress - p.delay) / 0.045
+        );
+
+        const alpha =
+            particleProgress *
+            p.alpha *
+            fade;
+
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.font = `600 ${p.size}px monospace`;
+
+        ctx.shadowColor = "rgba(180, 110, 255, 0.65)";
+        ctx.shadowBlur = 3;
+
+        ctx.fillText(
+            p.digit,
+            p.x,
+            p.y
+        );
+    }
+
+    ctx.restore();
+}
+function drawMessage(t) {
+
+    const startTime = 18.7;
+    const duration = 1.8;
+    const endTime = 29.5;
+
+    const intro = Math.max(
+        0,
+        Math.min(1, (t - startTime) / duration)
+    );
+
+    const outro = Math.max(
+        0,
+        Math.min(1, (t - endTime) / 1.5)
+    );
+
+    const reveal = intro * (1 - outro);
+
+    if (reveal <= 0) return;
+
+    const smooth = x => x * x * (3 - 2 * x);
+
+    const entrance = smooth(intro);
+    const exit = 1 - smooth(outro);
+
+    const centerX = W / 2;
+    const centerY = H * 0.44;
+
+    ctx.save();
+
+    ctx.globalAlpha = entrance * exit;
+
+    // Cinematic background glow
+
+    const glow = ctx.createRadialGradient(
+        centerX,
+        centerY,
+        0,
+        centerX,
+        centerY,
+        Math.min(W, H) * 0.48
+    );
+
+    glow.addColorStop(0, "rgba(115, 53, 170, 0.22)");
+    glow.addColorStop(0.45, "rgba(65, 25, 105, 0.10)");
+    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    // Floating light particles
+
+    for (let i = 0; i < 55; i++) {
+
+        const phase = t * 0.65 + i * 2.4;
+
+        const x = centerX +
+            Math.sin(phase * 0.7 + i) * W * 0.42;
+
+        const y = centerY +
+            Math.cos(phase * 0.55 + i * 1.8) * H * 0.27;
+
+        const radius = 0.8 + Math.sin(phase * 2) * 0.6;
+
+        ctx.globalAlpha =
+            entrance * exit *
+            (0.2 + Math.sin(phase) * 0.15);
+
+        ctx.fillStyle = "#D9B5FF";
+
+        ctx.shadowColor = "#A45BFF";
+        ctx.shadowBlur = 12;
+
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(0.3, radius), 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.globalAlpha = entrance * exit;
+
+    // Main title
+
+    const title = "YOUR EYES ARE TRULY BEAUTIFUL";
+
+    let fontSize = Math.min(43, W * 0.052);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    while (fontSize > 13) {
+
+        ctx.font = `600 ${fontSize}px Cinzel, Georgia, serif`;
+
+        if (ctx.measureText(title).width < W * 0.9) break;
+
+        fontSize -= 1;
+    }
+
+    const titleY = centerY;
+
+    const scale = 0.88 + entrance * 0.12;
+
+    ctx.translate(centerX, titleY);
+    ctx.scale(scale, scale);
+    ctx.translate(-centerX, -titleY);
+
+    // Text shadow
+
+    ctx.shadowColor = "rgba(164, 91, 255, 0.9)";
+    ctx.shadowBlur = 28;
+
+    // Luxury gradient
+
+    const gradient = ctx.createLinearGradient(
+        centerX - W * 0.4,
+        titleY,
+        centerX + W * 0.4,
+        titleY
+    );
+
+    gradient.addColorStop(0, "#9D66D8");
+    gradient.addColorStop(0.25, "#E9D5FF");
+    gradient.addColorStop(0.5, "#FFFFFF");
+    gradient.addColorStop(0.75, "#E8C8FF");
+    gradient.addColorStop(1, "#A56BE5");
+
+    ctx.fillStyle = gradient;
+
+    ctx.fillText(title, centerX, titleY);
+
+    // Moving light sweep
+
+    const sweepProgress = (t * 0.32) % 1.5 - 0.25;
+
+    const sweepX = centerX - W * 0.48 +
+        sweepProgress * W * 0.96;
+
+    ctx.save();
+
+    ctx.beginPath();
+    ctx.rect(
+        centerX - W * 0.47,
+        titleY - fontSize,
+        W * 0.94,
+        fontSize * 2
+    );
+
+    ctx.clip();
+
+    const light = ctx.createLinearGradient(
+        sweepX - 35,
+        0,
+        sweepX + 35,
+        0
+    );
+
+    light.addColorStop(0, "rgba(255,255,255,0)");
+    light.addColorStop(0.5, "rgba(255,255,255,0.85)");
+    light.addColorStop(1, "rgba(255,255,255,0)");
+
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = light;
+
+    ctx.fillRect(
+        sweepX - 35,
+        titleY - fontSize,
+        70,
+        fontSize * 2
+    );
+
+    ctx.restore();
+
+    // Decorative luminous line
+
+    const lineWidth = W * 0.48 * entrance;
+
+    const lineGradient = ctx.createLinearGradient(
+        centerX - lineWidth / 2,
+        0,
+        centerX + lineWidth / 2,
+        0
+    );
+
+    lineGradient.addColorStop(0, "rgba(150,90,220,0)");
+    lineGradient.addColorStop(0.5, "#E6C6FF");
+    lineGradient.addColorStop(1, "rgba(150,90,220,0)");
+
+    ctx.shadowColor = "#B66CFF";
+    ctx.shadowBlur = 18;
+
+    ctx.fillStyle = lineGradient;
+    ctx.fillRect(
+        centerX - lineWidth / 2,
+        titleY + fontSize * 1.05,
+        lineWidth,
+        1.5
+    );
+
+    // Subtitle
+
+    ctx.shadowBlur = 8;
+
+    ctx.fillStyle = "#D3B8EB";
+
+    ctx.font = `500 ${Math.min(12, W * 0.017)}px Cinzel, Georgia, serif`;
+
+    ctx.fillText(
+        "IT IS AS IF THE ENTIRE WORLD IS CONTAINED WITHIN YOUR EYES",
+        centerX,
+        titleY + fontSize * 1.9
+    );
+
+    // Small decorative stars
+
+    ctx.fillStyle = "#EAD8FF";
+    ctx.font = "12px serif";
+
+    ctx.fillText("✦", centerX - lineWidth * 0.55, titleY + fontSize * 1.05);
+    ctx.fillText("✦", centerX + lineWidth * 0.55, titleY + fontSize * 1.05);
+
+    ctx.restore();
+}
+function drawHeart(t){
+ const a=smooth((t-30.3)/2), build=smooth((t-31)/4.5);
+ if(a<.01)return;
+ const angle=t*.24, radius=Math.min(W*.27,H*.31);
+ ctx.save();
+ const glow=ctx.createRadialGradient(W/2,H*.52,2,W/2,H*.52,radius*1.55);
+ glow.addColorStop(0,"rgba(180,91,255,.19)");glow.addColorStop(1,"rgba(60,15,100,0)");
+ ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+ for(const p of heart){
+  const c=Math.cos(angle),s=Math.sin(angle);
+  const x=p.x*c-p.z*s,z=p.x*s+p.z*c;
+  const perspective=3.2/(3.2+z*.55);
+  const px=W/2+x*radius*perspective;
+  const py=H*.51+p.y*radius*perspective;
+  const fade=a*build*(z>0?1:.34);
+  ctx.globalAlpha=fade*clamp(.65+z*.25,0,1);
+  ctx.fillStyle=z>0?"#f3d5ff":"#9856d5";
+  ctx.font=`${Math.max(5,7.5*perspective)}px monospace`;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.fillText(p.digit,px,py);
+ }
+ ctx.restore();
+ if(t>35){
+  ctx.save();ctx.globalAlpha*smooth((t-35)/1.2);
+  ctx.textAlign="center";ctx.fillStyle="#e5ceff";
+  ctx.font=`600 ${Math.min(13,W*.02)}px Cinzel,serif`;
+  ctx.fillText("I LOVE YOU ARMITA",W/2,H*.86);ctx.restore();
+ }
+}
+function frame(now){
+ const t=(now-start)/1000;
+ background(now);
+ drawEye(t);drawMessage(t);drawHeart(t);
+ raf=requestAnimationFrame(frame);
+}
+document.getElementById("replay").addEventListener("click",()=>{
+ start=performance.now();
+});
+addEventListener("resize",resize);
+photo.onload=()=>{resize();if(!raf)raf=requestAnimationFrame(frame);};
+photo.onerror=()=>{document.body.innerHTML='<p style="color:white;padding:24px">Keep eyes.jpg in the same folder as index.html.</p>';};
+if(photo.complete&&photo.naturalWidth){resize();raf=requestAnimationFrame(frame);}
+})();
+</script>
+</body>
+</html>
